@@ -6,6 +6,7 @@ from PIL import Image
 from glob import glob
 import torchvision.transforms as transforms
 import os
+import sys
 
 batch_w = 600
 batch_h = 400
@@ -56,6 +57,52 @@ class MemoryFriendlyLoader(torch.utils.data.Dataset):
         #     return torch.from_numpy(low), img_name
 
         return torch.from_numpy(low), img_name
+
+    def __len__(self):
+        return self.count
+
+
+class MemoryBigLoader(torch.utils.data.Dataset):
+    def __init__(self, img_dir, task):
+        self.low_img_dir = img_dir
+        self.task = task
+        self.train_low_data_names = []
+
+        for root, dirs, names in os.walk(self.low_img_dir):
+            for name in names:
+                self.train_low_data_names.append(os.path.join(root, name))
+
+        self.train_low_data_names.sort()
+        self.count = len(self.train_low_data_names)
+
+        transform_list = []
+        transform_list += [transforms.ToTensor()]
+        self.transform = transforms.Compose(transform_list)
+
+        self.low = []
+        for idx in range(len(self.train_low_data_names)):
+            '''
+            print("\r", end="")
+            print("数据集读取进度: {}%: ".format(idx * 100 // self.count), "▓" * (idx * 20 // self.count), end="")
+            sys.stdout.flush()
+            '''
+            temp = self.load_images_transform(self.train_low_data_names[idx])
+            temp = np.asarray(temp, dtype=np.float32)
+            temp = np.transpose(temp[:, :, :], (2, 0, 1))
+            self.low.append(torch.from_numpy(temp))
+
+    def load_images_transform(self, file):
+        im = Image.open(file).convert('RGB')
+        img_norm = self.transform(im).numpy()
+        img_norm = np.transpose(img_norm, (1, 2, 0))
+        return img_norm
+
+    def __getitem__(self, index):
+
+        low = self.low[index]
+        img_name = self.train_low_data_names[index].split('\\')[-1]
+
+        return low, img_name
 
     def __len__(self):
         return self.count

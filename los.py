@@ -17,7 +17,7 @@ from model import *
 from multi_read_data import MemoryBigLoader
 
 parser = argparse.ArgumentParser("SCI")
-parser.add_argument('--batch_size', type=int, default=1, help='batch size')
+parser.add_argument('--batch_size', type=int, default=8, help='batch size')
 parser.add_argument('--cuda', default=True, type=bool, help='Use CUDA to train model')
 parser.add_argument('--gpu', type=str, default='0', help='gpu device id')
 parser.add_argument('--seed', type=int, default=2, help='random seed')
@@ -82,67 +82,23 @@ def main():
     model.enhance.in_conv.apply(model.weights_init)
     model.enhance.conv.apply(model.weights_init)
     model.enhance.out_conv.apply(model.weights_init)
-    model.calibrate.in_conv.apply(model.weights_init)
-    model.calibrate.convs.apply(model.weights_init)
-    model.calibrate.out_conv.apply(model.weights_init)
+    model.calibrate.RDB.apply(model.weights_init)
+    model.calibrate.inconv.apply(model.weights_init)
+    model.calibrate.onexone.apply(model.weights_init)
+    model.calibrate.outconv.apply(model.weights_init)
 
+
+    model.load_state_dict(torch.load("./weights_850.pt"))
+    # model.apply(model.weights_init)
     model = model.cuda()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), weight_decay=3e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999))  # , weight_decay=1e-4)
     MB = utils.count_parameters_in_MB(model)
     logging.info("model size = %f", MB)
     print(MB)
 
-    train_low_data_names = '../autodl-tmp/traindata/MITRGBS2'
-    TrainDataset = MemoryBigLoader(img_dir=train_low_data_names, task='train')
-    logging.info("Using train data:%s" % (train_low_data_names))
-
-    test_low_data_names = './data/medium'
-    TestDataset = MemoryBigLoader(img_dir=test_low_data_names, task='test')
-
-    train_queue = torch.utils.data.DataLoader(
-        TrainDataset, batch_size=args.batch_size,
-        pin_memory=True, num_workers=0, shuffle=True)
-
-    test_queue = torch.utils.data.DataLoader(
-        TestDataset, batch_size=1,
-        pin_memory=True, num_workers=0, shuffle=True)
-
-    total_step = 0
-    #model.load_state_dict(torch.load("./weights_1060.pt"))
-
-    testinput, image_name = next(iter(test_queue))
-    for epoch in range(args.epochs):
-        model.train()
-        losses = []
-        for batch_idx, (input, _) in enumerate(train_queue):
-            total_step += 1
-            input = Variable(input, requires_grad=False).cuda()  # 转到GPU显存中
-
-            optimizer.zero_grad()
-            loss = model._loss(input)
-            loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), 1)
-            optimizer.step()
-
-            losses.append(loss.item())
-            logging.info('train-epoch %03d %03d %f', epoch, batch_idx, loss)
-
-        logging.info('train-epoch %03d %f', epoch, np.average(losses))
-
-
-        if epoch % 10 == 0 and total_step != 0:
-            utils.save(model, os.path.join(model_path, 'weights_%d.pt' % epoch))
-            logging.info('train %03d %f', epoch, loss)
-            model.eval()
-            with torch.no_grad():
-                # for _, (input, image_name) in enumerate(test_queue):
-
-                testinput = Variable(testinput, volatile=True).cuda()
-                image_name = image_name[0].split('\\')[-1].split('.')[0]
-                illu_list, ref_list, input_list, atten = model(testinput)
-                u_name = '%s.png' % (image_name + '_' + str(epoch))
-                u_path = image_path + '/' + u_name
-                save_images(ref_list[0], u_path)
+    for _, param in enumerate(model.named_parameters()):
+        print(param)
+        print('----------------')
 
 if __name__ == '__main__':
     main()
